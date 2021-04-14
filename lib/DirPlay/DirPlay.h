@@ -4,6 +4,12 @@
 #include "Arduino.h"
 #include "SD_Libs.h"
 
+// The idea was to design an SD player that could play all the music tracks on an SD in an endless loop.
+// Both the directory ranges and a file name filter can be specified (Config()). 
+// The method NextFile() returns the next file (including file path), 
+// which can then be played back with ESP32-AudioI2S, for example.
+// Bill Greiman's library SdFat is needed because the solution works with working directories and relative paths. 
+
 typedef Print print_t; // Use Arduino Print. 
 
 template <typename T>
@@ -65,8 +71,9 @@ void  Stack<T>::print(print_t* pr) {
 
 /******************************************************************************/
 
-enum entry_type_t { DIR_ENTRY = 0, FILE_ENTRY = 1 }; // als const bool definieren
+enum entry_type_t { DIR_ENTRY = 0, FILE_ENTRY = 1 };
 typedef bool (*filter_func)(const char *, int);
+
 
 class DirPlay {
 public:
@@ -100,7 +107,6 @@ private:
     dir_info_t dinf_file;
     dir_info_t dinf_dir;
     size_t next_entry(entry_type_t type, dir_info_t *entry_info, int *entry_pos);
-    int m_strcat(char* dest, const char* src, int n = -1);
     bool is_dir_sep(char c) { return (c=='/'); }
     int cur_dir_offset() { return (cur_dir_path_len == 1 ? 0 : 1); }
     filter_func file_filter = nullptr;

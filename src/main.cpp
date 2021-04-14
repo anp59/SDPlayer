@@ -1,9 +1,10 @@
 #include <Arduino.h>
+#include "Preferences.h"
 #include "Audio.h"
 #include "SD_Libs.h"
 #include "DirPlay.h"
 
-#define   PF Serial.printf
+
 // Digital I/O used
 #ifndef SS
     #define SS         5
@@ -19,7 +20,9 @@
 
 Audio audio;
 DirPlay dplay;
-const char *pSong;
+Preferences prefs;
+
+const char *pCurrentSong;
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels);
 const char *name(File& f);
@@ -36,13 +39,28 @@ bool isMusicFile(const char *filename, int len) {
     return ( strcasecmp(p, ".mp3") == 0 || strcasecmp(p, ".m4a") == 0 );
 }
 
+bool PlayNextFile(const char** p, bool next_dir = false) {
+    if ( dplay.NextFile(p, next_dir) ) {
+        Serial.printf(">>> play %s\n", *p);
+        audio.connecttoFS(SD, *p); 
+        return true;
+    }
+    else {
+        Serial.println(">>>>>> End of playlist, no loop-mode or no file found!");
+        return false;  
+    }
+}
+
 void setup() {
+    char filepath [256];
+    const char rootpath[] = "/";
+
     Serial.begin(115200);
     Serial.println();
 
     if ( !SD.begin() ) {
-        Serial.println("Card Mount Failed");
-        return;
+        //Serial.println("Card Mount Failed");
+        SD.initErrorHalt(); // SdFat-lib helper function
     }
     
     //listDir(SD, "/", 10); 
@@ -50,33 +68,42 @@ void setup() {
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
     audio.setVolume(1); // 0...21
 
-    if ( !dplay.Config("/", "/", 5) )
-        Serial.printf("Config fehlgeschlagen!");
+    prefs.begin("lastFile", false); 
+    if ( !prefs.getString("filepath", filepath, sizeof(filepath)) )
+        strcpy(filepath, rootpath);
+
+    if ( !dplay.Config(filepath, rootpath, 5) ) {   // dirdepth = 1, all files from rootpath plus one subdir will be selected
+        Serial.printf("Config failed! Ceck the path '%s' / root_path '%s'\nUsing rootpath instead of path!\n", filepath, rootpath);
+        if ( !dplay.Config(rootpath, rootpath, 5) ) { 
+            Serial.printf("Config failed! Ceck the rootpath!\n");
+            SysCall::halt();    // SysCall from SdFat-Lib
+        }
+    } 
+    
     dplay.SetFileFilter(isMusicFile);
-    dplay.SetLoopMode(false);    
+    dplay.SetLoopMode(true);    
 
-    if ( dplay.NextFile(&pSong) ) {
-        Serial.printf(">>>   %s\n", pSong);
-        audio.connecttoFS(SD, pSong);
-    }
-
+    PlayNextFile(&pCurrentSong);
 }
+
+
 void loop()
 {
+    bool nextDir = false;
     audio.loop();
-    if (Serial.available()) { 
-        String r=Serial.readString(); r.trim();   
+    if ( Serial.available() ) { // enter for next file, r to restart
+        String r = Serial.readString(); r.trim();   
         audio.stopSong();
+        prefs.putString("filepath", pCurrentSong);
+        if ( r == "d" ) {
+            nextDir = true;
+            Serial.println(">>>>>> Next directory");
+        }
         if ( r == "r" ) {
             dplay.Reset();
-            Serial.println(">>>>>> Reset Playlist to root_path");
+            Serial.println(">>>>>> Reset playlist to root_path");
         }
-        if ( dplay.NextFile(&pSong) ) {
-            Serial.printf(">>>   %s\n", pSong);
-            audio.connecttoFS(SD, pSong);
-        }   
-        else 
-            Serial.println(">>>>>> Ende der Playlist");
+        PlayNextFile(&pCurrentSong, nextDir);
     }
 }
 
@@ -89,10 +116,8 @@ void loop()
 // }
 void audio_eof_mp3(const char *info){  //end of file
     Serial.print("eof_mp3     ");Serial.println(info);
-    if ( dplay.NextFile(&pSong) ) {
-        Serial.printf(">>>   %s\n", pSong);
-        audio.connecttoFS(SD, pSong);
-    }
+    prefs.putString("filepath", pCurrentSong);
+    PlayNextFile(&pCurrentSong);
 }
 // void audio_showstation(const char *info){
 //     Serial.print("station     ");Serial.println(info);

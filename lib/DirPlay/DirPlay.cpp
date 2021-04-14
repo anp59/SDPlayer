@@ -1,4 +1,5 @@
 #include "DirPlay.h"
+
 const bool DEBUG = false;
 #define P if(DEBUG) Serial.printf
 
@@ -14,9 +15,7 @@ void DirPlay::init_dir_stack(int size) {
     dir_stack = new Stack<dir_info_t>(size); 
 }
 
-// 0, wenn kein Eintrag gefunden oder Fehler im Dateinamen aufgetreten sind
-// > 0 ist Laenge des Dateinamens. File/Dir-Name ist an cur_path angehängt, cur_path_len aktualisiert, 
-// cur_dir_len wird nicht veraendert
+
 size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry_pos) {
     size_t entry_name_len;
     int file_name_pos;
@@ -79,7 +78,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
                 continue;
             dir_stack->push(dinf_dir);
             cur_dir_path_len = cur_path_len;
-            P("down path-< %s cur_path_len=%d (push info: %d/%d)\n", cur_path, cur_path_len, dinf_dir.pos, dinf_dir.index);
+            P("Down path-< %s cur_path_len=%d (push info: %d/%d)\n", cur_path, cur_path_len, dinf_dir.pos, dinf_dir.index);
             dinf_file.init();
             dinf_dir.init();
             cur_dir.close();
@@ -92,18 +91,19 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
         if ( dir_stack->empty() ) {
             if ( loop_play ) {
                 dinf_dir.init();
+                dinf_file.init();
                 file_mode = true;
                 continue;  
             }            
             cur_dir.close();
-            return 0; // ende
+            return 0; // end
         }
         else {
             dinf_dir = dir_stack->pop();
             cur_dir_path_len = dinf_dir.pos;
             cur_dir_path_len -= cur_dir_offset();
             cur_path[cur_dir_path_len] = 0;
-            P("up path-> %s cur_dir_len=%d\n", cur_path, cur_dir_path_len);
+            P("Up path-> %s cur_dir_len=%d\n", cur_path, cur_dir_path_len);
             cur_dir.close();
             cur_dir.open(cur_path, O_RDONLY);
             file_mode = false;
@@ -118,55 +118,60 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
     int i, pos;
     File tmp;
     dir_info_t dinf;
-    bool is_lastfile = false;
 
-    P("path=%s root=%s\n", path, root_path ? root_path : "<>");
+    P("Config in: path=%s root=%s\n", path, root_path ? root_path : "<>");
     cur_dir.close();
+    dinf_file.init();
     init_dir_stack(max_dir_depth);
     if ( !is_dir_sep(*path) )
         return false; 
     if ( root_path ) 
         if ( !is_dir_sep(*root_path) )
             return false;
-    // file / dir oeffnen, um path zu pruefen
-    if ( !tmp.open(path, O_RDONLY) )
+    cur_path_len = strlen(path);
+    if ( cur_path_len > sizeof(cur_path) )
         return false;
-    if ( tmp.isFile() ) { // file name separieren
-        P("isFile\n");
-        is_lastfile = true;
+    strcpy(cur_path, path);
+
+    while ( cur_path_len > 1 && is_dir_sep(cur_path[cur_path_len-1]) )
+        cur_path[--cur_path_len] = 0; // cut last separator '/'    
+    if ( root_path ) {
+        root_path_len = strlen(root_path);
+        while ( root_path_len>1 && is_dir_sep(root_path[root_path_len-1]) ) root_path_len--;
+        if ( !strncmp(cur_path, root_path, root_path_len) == 0 ) {
+            // root_path is not part of path, replace cur_path with root_path
+            strncpy(cur_path, root_path, root_path_len);
+            cur_path[cur_path_len = root_path_len] = 0;
+            P("cur_path=%s len=%d (replaced with root_path)\n", cur_path, cur_path_len);
+        }
+    }
+    else
+        root_path_len = 1;  // set root_path to "/"           
+    // open file/dir to check path
+    if ( !tmp.open(cur_path, O_RDONLY) ) {
+        P("cur_path=%s not found!\n", cur_path);
+        return false;
+    }
+    if ( tmp.isFile() ) {
         dinf_file.index = tmp.dirIndex();
         tmp.close();
-    }
-    *cur_path = 0;
-    cur_path_len = m_strcat(cur_path, path, sizeof(cur_path));
-    while ( cur_path_len > 1 && cur_path[cur_path_len-1] == '/' )   
-        cur_path[--cur_path_len] = 0; // letztes '/' entfernen
-    if ( is_lastfile ) {  // filename abtrennen   
+        // cut filename from cur_path 
         if ( (p = strrchr(cur_path, '/' )) ) {
             if ( p == cur_path ) *(p+1) = 0; else *p = 0;
             cur_path_len = p - cur_path;
         }
-        P("file=%s, index=%d\n", p+1, dinf_file.index);
+        P("last_file=%s, index=%d\n", p+1, dinf_file.index);
     }
-    if ( root_path ) {
-        root_path_len = strlen(root_path);
-        while ( root_path_len>1 && is_dir_sep(root_path[root_path_len-1]) ) root_path_len--;
-        if ( !strncmp(cur_path, root_path, root_path_len) == 0 )
-            return false;
-    }
-    else
-        root_path_len = 1;  // root_path is "/"           
-
-    pos = root_path_len > 1 ? root_path_len+1 : root_path_len; // pos steht auf ersten Zeichen nach root_path (Start rel);
-    P("1-cur_path=%s, pos=%d\n", cur_path, pos);    
+    // pos at first char after root_path, save details (dir_info_t) of all directories on the stack
+    pos = root_path_len > 1 ? root_path_len+1 : root_path_len; // pos at first char after root_path
     for ( i = pos; pos < cur_path_len && !dir_stack->full(); pos = ++i ) {
-        while ( cur_path[i] && cur_path[i] != '/' ) i++; // i begrenzt Ende des pos folgenden directory, steht auf 0 (i==cur_path_len) oder /
+        while ( cur_path[i] && cur_path[i] != '/' ) i++; 
         if ( pos == 1 ) {
             cur_dir.open("/", O_RDONLY);
             P("* cur_dir=/\n");
         }
         else {
-            cur_path[pos-1] = 0;    // cur_dir path begrenzen 
+            cur_path[pos-1] = 0; 
             P("* cur_dir=%s\n", cur_path);
             cur_dir.open(cur_path, O_RDONLY);
             cur_path[pos-1] = '/';
@@ -185,14 +190,14 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
                 dinf = { pos, (uint16_t)-1 };
             cur_dir.close();
             dir_stack->push(dinf);
-            P("stack %d: ", dir_stack->status()); dir_stack->top().print(&Serial);
+            P("* stack %d: ", dir_stack->status()); 
         }
         else {
             P("* cur_dir open failed\n");
             return false;
         }
     }
-    P("2-cur_path=%s| rpl=%d, cpl=%d\n-------------------\n", cur_path, root_path_len, cur_path_len);
+    P("Config out: cur_path=%s| rpl=%d, cpl=%d\n-------------------\n", cur_path, root_path_len, cur_path_len);
     cur_dir_path_len = cur_path_len;
     return cur_dir.open(cur_path, O_RDONLY);    
 }
@@ -205,21 +210,6 @@ bool DirPlay::Reset() {
     dinf_file.init();
     cur_dir.close();
     return cur_dir.open(cur_path, O_RDONLY);  
-}
-
-// https://www.joelonsoftware.com/2001/12/11/back-to-basics/ ... extended
-// return Zeiger auf abschliessende 0
-int DirPlay::m_strcat(char* dest, const char* src, int n) {
-    char *start = dest;
-    while ( *dest ) dest++;
-    if ( n < 1 )
-        while ( (*dest++ = *src++) );
-    else {
-        while ( --n && *src) 
-            *dest++ = *src++;
-        *dest++ = 0;
-    }
-    return --dest - start;
 }
 
 

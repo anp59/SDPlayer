@@ -1,6 +1,6 @@
 // anp59 (Mrz 2021)
-// Vereinfachte Einbindung verschiedener SD Libraries in bestehende Arduino Projekte
-// in SdFat ggf. DESTRUCTOR_CLOSES_FILE setzen (Zeile 257)
+// wrapper for simplified integration of different SD libraries into existing Arduino projects
+// if needed set DESTRUCTOR_CLOSES_FILE in SdFatConfig.h (line 257)
 
 #ifndef __SD_LIBS_H__
 #define __SD_LIBS_H__
@@ -57,6 +57,7 @@
 
     using namespace fs;
     #define SDFATFS_USED
-    #define SD SD_SDFAT
+    #define SD SD_SDFAT     // to simplify the integration without code adaptation
+
 #endif  // SD_IMPL
 #endif  // __SD_LIBS_H__

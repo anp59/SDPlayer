@@ -422,7 +422,7 @@ bool Audio::connecttoFS(fs::FS &fs, const char* file) {
 
     String s_file = file;
 
-    #ifdef SDFATFS_USED
+#ifdef SDFATFS_USED
     //UTF8->UTF16 (lowbyte)
     const uint8_t ascii[60] = {
     //129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148  // UTF8(C3)
