@@ -77,7 +77,7 @@ typedef bool (*filter_func)(const char *, int);
 
 class DirPlay {
 public:
-    DirPlay() { init_dir_stack(0); }
+    DirPlay() { Config("/"); }
     DirPlay(const char *path, const char *root_path = nullptr, int max_dir_depth = 0) {
         Config(path, root_path, max_dir_depth);
     }
@@ -87,13 +87,9 @@ public:
     bool Reset(); // reset to root_path
     void SetLoopMode(bool mode) { loop_play = mode; }
     void SetFileFilter(filter_func f = nullptr) { file_filter = f; }
+    bool IsCardError() { return card_error; }
+    unsigned int GetPlayedFiles() { return file_count; }
 private:
-    bool loop_play = false;
-    char cur_path[256];
-    int root_path_len;
-    int cur_path_len;
-    int cur_dir_path_len;
-    File cur_dir;
     typedef struct dir_info {
         int pos;
         uint16_t index;
@@ -102,7 +98,18 @@ private:
         void print(print_t* pr) { pr->printf("(pos=%d / index=%u)\n", pos, index); }
         void init() { pos = 0; index = uint16_t(-1); }
     } dir_info_t;
-    void init_dir_stack(int size);
+    
+    bool loop_play = false;
+    bool card_error = false;
+    char cur_path[256];
+    int root_path_len = 0; // must be 0 for correct initialization
+    int cur_path_len;
+    int cur_dir_path_len;
+    unsigned int file_count;
+    File cur_dir_file;
+
+    void init(int size);
+    void init_dir_stack(unsigned int size);
     Stack<dir_info_t> *dir_stack = nullptr;
     dir_info_t dinf_file;
     dir_info_t dinf_dir;

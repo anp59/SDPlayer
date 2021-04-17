@@ -1,10 +1,10 @@
 #include "DirPlay.h"
 
-const bool DEBUG = false;
+const bool DEBUG = true;
 #define P if(DEBUG) Serial.printf
 
-void DirPlay::init_dir_stack(int size) {
-    if ( size < 0 ) size = 0;
+void DirPlay::init_dir_stack(unsigned int size) {
+    if ( size > 255 ) size = 0;
     if ( dir_stack ) {
         if ( dir_stack->size() == size ) {
             dir_stack->clear(); 
@@ -22,11 +22,11 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
     File f;
 
     if ( entry_info->index == uint16_t(-1) )
-        cur_dir.rewind();
+        cur_dir_file.rewind();
     else
-        if ( f.open(&cur_dir, entry_info->index, O_RDONLY) )
+        if ( f.open(&cur_dir_file, entry_info->index, O_RDONLY) )
             f.close();
-    f.openNext(&cur_dir, O_RDONLY);
+    f.openNext(&cur_dir_file, O_RDONLY);
     P("NextEntry in: cur_path=%s, cur_dir_len=%d, type=%s\n", cur_path, cur_dir_path_len, type==FILE_ENTRY?"FILE_ENTRY":"DIR_ENTRY");
 
     while ( f ) {
@@ -56,7 +56,7 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
         }
         else
             f.close(); 
-        f.openNext(&cur_dir, O_RDONLY);
+        f.openNext(&cur_dir_file, O_RDONLY);
     }
     return 0;
 }
@@ -65,10 +65,11 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
     bool file_mode = !next_dir;
     *file_path_ptr = "";
     int entry_name_pos;
-    while (true) {
+    while ( !card_error) {
         if ( file_mode ) {
             if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
                 *file_path_ptr = cur_path;
+                file_count++;
                 return entry_name_pos;
             }
             file_mode = false;
@@ -81,21 +82,27 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
             P("Down path-< %s cur_path_len=%d (push info: %d/%d)\n", cur_path, cur_path_len, dinf_dir.pos, dinf_dir.index);
             dinf_file.init();
             dinf_dir.init();
-            cur_dir.close();
-            cur_dir.open(cur_path, O_RDONLY);
-            if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
-                *file_path_ptr = cur_path;
-                return entry_name_pos; 
+            cur_dir_file.close();
+            if ( cur_dir_file.open(cur_path, O_RDONLY) ) {
+                if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
+                    *file_path_ptr = cur_path;
+                    file_count++;
+                    return entry_name_pos; 
+                }
+            }
+            else {
+                card_error = true;
+                break;
             }
         }
         if ( dir_stack->empty() ) {
-            if ( loop_play ) {
+            if ( loop_play && file_count ) {
                 dinf_dir.init();
                 dinf_file.init();
                 file_mode = true;
                 continue;  
             }            
-            cur_dir.close();
+            cur_dir_file.close();
             return 0; // end
         }
         else {
@@ -104,10 +111,12 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
             cur_dir_path_len -= cur_dir_offset();
             cur_path[cur_dir_path_len] = 0;
             P("Up path-> %s cur_dir_len=%d\n", cur_path, cur_dir_path_len);
-            cur_dir.close();
-            cur_dir.open(cur_path, O_RDONLY);
-            file_mode = false;
-            continue;
+            cur_dir_file.close();
+            if ( cur_dir_file.open(cur_path, O_RDONLY) ) {
+                file_mode = false;
+                continue;
+            }
+            card_error = true;
         }
     } 
     return 0;
@@ -116,13 +125,11 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
 bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth) {
     char *p;
     int i, pos;
-    File tmp;
+    File tmp_file;
     dir_info_t dinf;
 
     P("Config in: path=%s root=%s\n", path, root_path ? root_path : "<>");
-    cur_dir.close();
-    dinf_file.init();
-    init_dir_stack(max_dir_depth);
+    init(max_dir_depth);
     if ( !is_dir_sep(*path) )
         return false; 
     if ( root_path ) 
@@ -148,13 +155,13 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
     else
         root_path_len = 1;  // set root_path to "/"           
     // open file/dir to check path
-    if ( !tmp.open(cur_path, O_RDONLY) ) {
+    if ( !tmp_file.open(cur_path, O_RDONLY) ) {
         P("cur_path=%s not found!\n", cur_path);
         return false;
     }
-    if ( tmp.isFile() ) {
-        dinf_file.index = tmp.dirIndex();
-        tmp.close();
+    if ( tmp_file.isFile() ) {
+        dinf_file.index = tmp_file.dirIndex();
+        tmp_file.close();
         // cut filename from cur_path 
         if ( (p = strrchr(cur_path, '/' )) ) {
             if ( p == cur_path ) *(p+1) = 0; else *p = 0;
@@ -167,28 +174,28 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
     for ( i = pos; pos < cur_path_len && !dir_stack->full(); pos = ++i ) {
         while ( cur_path[i] && cur_path[i] != '/' ) i++; 
         if ( pos == 1 ) {
-            cur_dir.open("/", O_RDONLY);
+            cur_dir_file.open("/", O_RDONLY);
             P("* cur_dir=/\n");
         }
         else {
             cur_path[pos-1] = 0; 
             P("* cur_dir=%s\n", cur_path);
-            cur_dir.open(cur_path, O_RDONLY);
+            cur_dir_file.open(cur_path, O_RDONLY);
             cur_path[pos-1] = '/';
         }
-        if ( cur_dir ) {
+        if ( cur_dir_file ) {
             cur_path[i] = 0;
             P("* open %s\n", cur_path+pos);
-            tmp.open(&cur_dir, cur_path + pos, O_RDONLY);
+            tmp_file.open(&cur_dir_file, cur_path + pos, O_RDONLY);
             if ( i != cur_path_len )
                 cur_path[i] = '/';
-            if ( tmp ) {
-                dinf = { pos, tmp.dirIndex() };
-                tmp.close();
+            if ( tmp_file ) {
+                dinf = { pos, tmp_file.dirIndex() };
+                tmp_file.close();
             }
             else
                 dinf = { pos, (uint16_t)-1 };
-            cur_dir.close();
+            cur_dir_file.close();
             dir_stack->push(dinf);
             P("* stack %d: ", dir_stack->status()); 
         }
@@ -199,17 +206,28 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
     }
     P("Config out: cur_path=%s| rpl=%d, cpl=%d\n-------------------\n", cur_path, root_path_len, cur_path_len);
     cur_dir_path_len = cur_path_len;
-    return cur_dir.open(cur_path, O_RDONLY);    
+    return cur_dir_file.open(cur_path, O_RDONLY);    
 }
 
-bool DirPlay::Reset() {
-    cur_path_len = cur_dir_path_len = root_path_len;
-    cur_path[cur_path_len = cur_dir_path_len = root_path_len] = 0;
+void DirPlay::init(int size) {
+    if ( size >= 0 ) 
+        init_dir_stack(size);
+    else
+        dir_stack->clear();
+    card_error = false;
     dir_stack->clear();
     dinf_dir.init();
     dinf_file.init();
-    cur_dir.close();
-    return cur_dir.open(cur_path, O_RDONLY);  
+    cur_dir_file.close();
+    file_count = 0;
+    if ( root_path_len == 0 ) {
+        cur_path[0] = '/';
+        root_path_len = 1;
+    }
+    cur_path[cur_dir_path_len = cur_path_len = root_path_len] = 0;
 }
 
-
+bool DirPlay::Reset() {
+    init(-1);
+    return cur_dir_file.open(cur_path, O_RDONLY);
+}

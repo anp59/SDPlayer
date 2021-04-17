@@ -19,7 +19,7 @@
 #define I2S_LRC       26
 
 Audio audio;
-DirPlay dplay;
+DirPlay dplay;  // default without Config(): "/", dir_depth = 0
 Preferences prefs;
 
 const char *pCurrentSong;
@@ -36,18 +36,23 @@ bool isMusicFile(const char *filename, int len) {
         if ( filename[--len] == '.' ) break;
     p = filename + len;
     //Serial.printf("%s ", p);
-    return ( strcasecmp(p, ".mp3") == 0 || strcasecmp(p, ".m4a") == 0 );
+    return  (  strcasecmp(p, ".mp3") == 0 
+            || strcasecmp(p, ".m4a") == 0 
+            );
 }
 
 bool PlayNextFile(const char** p, bool next_dir = false) {
-    if ( dplay.NextFile(p, next_dir) ) {
-        Serial.printf(">>> play %s\n", *p);
-        audio.connecttoFS(SD, *p); 
-        return true;
-    }
-    else {
-        Serial.println(">>>>>> End of playlist, no loop-mode or no file found!");
-        return false;  
+    while ( true ) {
+        if ( dplay.NextFile(p, next_dir) ) {
+            Serial.printf(">>> play %s\n", *p);
+            if ( !audio.connecttoFS(SD, *p) )
+                continue; 
+            return true;
+        }
+        else {
+            Serial.println(">>>>>> End of playlist, no loop-mode or no file found!");
+            return false;  
+        }
     }
 }
 
@@ -63,7 +68,7 @@ void setup() {
         SD.initErrorHalt(); // SdFat-lib helper function
     }
     
-    //listDir(SD, "/", 10); 
+    // listDir(SD, "/", 10); 
     
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
     audio.setVolume(1); // 0...21
@@ -100,20 +105,23 @@ void loop()
             Serial.println(">>>>>> Next directory");
         }
         if ( r == "r" ) {
-            dplay.Reset();
+            if ( SD.begin() )
+                if ( !dplay.Reset() )
+                    Serial.println("Fehler Reset!");
             Serial.println(">>>>>> Reset playlist to root_path");
+            //nextDir = true;
         }
         PlayNextFile(&pCurrentSong, nextDir);
     }
 }
 
-// optional
-// void audio_info(const char *info){
-//     Serial.print("info        "); Serial.println(info);
-// }
-// void audio_id3data(const char *info){  //id3 metadata
-//     Serial.print("id3data     ");Serial.println(info);
-// }
+//optional
+void audio_info(const char *info){
+    Serial.print("info        "); Serial.println(info);
+}
+void audio_id3data(const char *info){  //id3 metadata
+    Serial.print("id3data     ");Serial.println(info);
+}
 void audio_eof_mp3(const char *info){  //end of file
     Serial.print("eof_mp3     ");Serial.println(info);
     prefs.putString("filepath", pCurrentSong);
