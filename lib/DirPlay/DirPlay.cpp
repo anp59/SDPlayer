@@ -1,6 +1,6 @@
 #include "DirPlay.h"
 
-const bool DEBUG = true;
+const bool DEBUG = false;
 #define P if(DEBUG) Serial.printf
 
 void DirPlay::init_dir_stack(unsigned int size) {

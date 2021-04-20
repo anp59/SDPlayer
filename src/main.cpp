@@ -3,24 +3,32 @@
 #include "Audio.h"
 #include "SD_Libs.h"
 #include "DirPlay.h"
+#include "InputButton.h"
+#include "ESP32Encoder.h"
 
 
 // Digital I/O used
 #ifndef SS
-    #define SS         5
+    #define SS      5
 #endif
-#define SD_CS          5
-#define SPI_SCK       18
-#define SPI_MISO      19
-#define SPI_MOSI      23
+#define SD_CS       5
+#define SPI_SCK     18
+#define SPI_MISO    19
+#define SPI_MOSI    23
 
-#define I2S_DOUT      25
-#define I2S_BCLK      27
-#define I2S_LRC       26
+#define I2S_DOUT    25
+#define I2S_BCLK    27
+#define I2S_LRC     26
+
+#define ENC_A       32
+#define ENC_B       33
+#define NEXT_BTN    4  
 
 Audio audio;
 DirPlay dplay;  // default without Config(): "/", dir_depth = 0
 Preferences prefs;
+ESP32Encoder encoder;
+InputButton enc_button(NEXT_BTN, true, ACTIVE_LOW);
 
 const char *pCurrentSong;
 
@@ -61,6 +69,11 @@ void setup() {
     const char rootpath[] = "/";
 
     Serial.begin(115200);
+    // Wait for USB Serial
+    while (!Serial) {
+        SysCall::yield();
+    }
+    //delay(1000);
     Serial.println();
 
     if ( !SD.begin() ) {
@@ -69,12 +82,16 @@ void setup() {
     }
     
     // listDir(SD, "/", 10); 
-    
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    audio.setVolume(1); // 0...21
+    ESP32Encoder::useInternalWeakPullResistors = DOWN;
+    encoder.attachSingleEdge(ENC_A, ENC_B);
 
+    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+    //audio.setVolume(1); // 0...21
+   
     prefs.begin("lastFile", false); 
-    if ( !prefs.getString("filepath", filepath, sizeof(filepath)) )
+    encoder.setCount(prefs.getInt("volume", 1));
+
+     if ( !prefs.getString("filepath", filepath, sizeof(filepath)) )
         strcpy(filepath, rootpath);
 
     if ( !dplay.Config(filepath, rootpath, 5) ) {   // dirdepth = 1, all files from rootpath plus one subdir will be selected
@@ -91,10 +108,28 @@ void setup() {
     PlayNextFile(&pCurrentSong);
 }
 
+int8_t old_enc_val = -2, enc_val;   // -2 garantiert, dass setVolume am Anfang aufgerufen wird
 
 void loop()
 {
     bool nextDir = false;
+    
+    if ( (enc_val = (int8_t)(encoder.getCount())) != old_enc_val )
+    {
+        // Check volume level and adjust if necassary
+        Serial.printf("enc_val = %d  ---  ", enc_val);
+        if ( enc_val < 0 ) 
+            enc_val = 0;
+        else
+            if ( enc_val > 21 )
+                enc_val = 21;
+        Serial.printf("Volume = %d\n", enc_val);
+        old_enc_val = enc_val;
+        encoder.setCount(enc_val);
+        audio.setVolume(enc_val);
+        prefs.putInt("volume", enc_val);
+    } 
+    
     audio.loop();
     if ( Serial.available() ) { // enter for next file, r to restart
         String r = Serial.readString(); r.trim();   
@@ -111,6 +146,12 @@ void loop()
             Serial.println(">>>>>> Reset playlist to root_path");
             //nextDir = true;
         }
+        PlayNextFile(&pCurrentSong, nextDir);
+    }
+    if ( enc_button.shortPress() && audio.isRunning() ) 
+    {
+        audio.stopSong();
+        prefs.putString("filepath", pCurrentSong);
         PlayNextFile(&pCurrentSong, nextDir);
     }
 }
