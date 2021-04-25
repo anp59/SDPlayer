@@ -36,6 +36,9 @@ extern __attribute__((weak)) void audio_lasthost(const char*);
 extern __attribute__((weak)) void audio_eof_speech(const char*);
 extern __attribute__((weak)) void audio_eof_stream(const char*); // The webstream comes to an end
 
+#ifdef SDFATFS_USED
+extern __attribute__((weak)) void audio_error_mp3(const char*); // readError (if SdFat is used) 
+#endif
 //----------------------------------------------------------------------------------------------------------------------
 
 class AudioBuffer {

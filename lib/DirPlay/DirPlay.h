@@ -85,6 +85,7 @@ public:
     bool Config(const char *path, const char *root_path = nullptr, int max_dir_depth = 0); 
     int NextFile(const char **name_ptr, bool next_dir = false);
     bool Reset(); // reset to root_path
+    bool Restart();
     void SetLoopMode(bool mode) { loop_play = mode; }
     void SetFileFilter(filter_func f = nullptr) { file_filter = f; }
     bool IsCardError() { return card_error; }
