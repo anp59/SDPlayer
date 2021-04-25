@@ -31,9 +31,12 @@ ESP32Encoder encoder;
 InputButton enc_button(NEXT_BTN, true, ACTIVE_LOW);
 
 const char *pCurrentSong;
+int8_t old_enc_val = -2, enc_val;   // -2 garantiert, dass setVolume am Anfang aufgerufen wird
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels);
 const char *name(File& f);
+bool readError = false;
+
 
 //###############################################################
 
@@ -89,9 +92,12 @@ void setup() {
     //audio.setVolume(1); // 0...21
    
     prefs.begin("lastFile", false); 
-    encoder.setCount(prefs.getInt("volume", 1));
-
-     if ( !prefs.getString("filepath", filepath, sizeof(filepath)) )
+    
+    enc_val = prefs.getInt("volume", 1);
+    encoder.setCount(enc_val ? enc_val : 1);
+    encoder.setFilter(1023);    
+    
+    if ( !prefs.getString("filepath", filepath, sizeof(filepath)) )
         strcpy(filepath, rootpath);
 
     if ( !dplay.Config(filepath, rootpath, 5) ) {   // dirdepth = 1, all files from rootpath plus one subdir will be selected
@@ -108,12 +114,19 @@ void setup() {
     PlayNextFile(&pCurrentSong);
 }
 
-int8_t old_enc_val = -2, enc_val;   // -2 garantiert, dass setVolume am Anfang aufgerufen wird
+unsigned last_time = 0;
+bool tick = false;
+const unsigned int interval = 2000;
 
 void loop()
 {
     bool nextDir = false;
-    
+    if ( tick ) {
+        tick = false;
+        last_time = millis();    
+    }
+    else tick = ( millis() > (last_time + interval) );
+
     if ( (enc_val = (int8_t)(encoder.getCount())) != old_enc_val )
     {
         // Check volume level and adjust if necassary
@@ -154,41 +167,40 @@ void loop()
         prefs.putString("filepath", pCurrentSong);
         PlayNextFile(&pCurrentSong, nextDir);
     }
+    if ( tick && (readError || SD.card()->errorCode() || dplay.IsCardError()) ) {
+        last_time = millis();
+        Serial.println("**** readError");   
+        if ( SD.begin() ) {
+            dplay.Restart();
+            PlayNextFile(&pCurrentSong);
+            readError = false; 
+        }
+    }
 }
 
 //optional
-void audio_info(const char *info){
+void audio_info(const char *info) {
     Serial.print("info        "); Serial.println(info);
 }
-void audio_id3data(const char *info){  //id3 metadata
-    Serial.print("id3data     ");Serial.println(info);
+void audio_id3data(const char *info) {  //id3 metadata
+    Serial.print("id3data     "); Serial.println(info);
 }
-void audio_eof_mp3(const char *info){  //end of file
-    Serial.print("eof_mp3     ");Serial.println(info);
+void audio_eof_mp3(const char *info) {  //end of file
+    Serial.print("eof_mp3     "); Serial.println(info);
     prefs.putString("filepath", pCurrentSong);
     PlayNextFile(&pCurrentSong);
 }
-// void audio_showstation(const char *info){
-//     Serial.print("station     ");Serial.println(info);
-// }
-// void audio_showstreamtitle(const char *info){
+void audio_error_mp3(const char *info) {
+    Serial.print("error_mp3   "); Serial.println(info);
+    readError = true;
+}
+// void audio_showstreamtitle(const char *info) {
 //     Serial.print("streamtitle ");Serial.println(info);
 // }
-// void audio_bitrate(const char *info){
+// void audio_bitrate(const char *info) {
 //     Serial.print("bitrate     ");Serial.println(info);
 // }
-// void audio_commercial(const char *info){  //duration in sec
-//     Serial.print("commercial  ");Serial.println(info);
-// }
-// void audio_icyurl(const char *info){  //homepage
-//     Serial.print("icyurl      ");Serial.println(info);
-// }
-// void audio_lasthost(const char *info){  //stream URL played
-//     Serial.print("lasthost    ");Serial.println(info);
-// }
-// void audio_eof_speech(const char *info){
-//     Serial.print("eof_speech  ");Serial.println(info);
-// }
+
 
 //####################################################################################
 

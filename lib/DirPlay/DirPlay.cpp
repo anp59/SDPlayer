@@ -1,7 +1,8 @@
 #include "DirPlay.h"
 
-const bool DEBUG = false;
-#define P if(DEBUG) Serial.printf
+const bool ENABLE_DEBUG_LOG = true;
+#define DBG(...) do if (ENABLE_DEBUG_LOG) printf("D# " __VA_ARGS__); while (0)
+
 
 void DirPlay::init_dir_stack(unsigned int size) {
     if ( size > 255 ) size = 0;
@@ -27,7 +28,8 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
         if ( f.open(&cur_dir_file, entry_info->index, O_RDONLY) )
             f.close();
     f.openNext(&cur_dir_file, O_RDONLY);
-    P("NextEntry in: cur_path=%s, cur_dir_len=%d, type=%s\n", cur_path, cur_dir_path_len, type==FILE_ENTRY?"FILE_ENTRY":"DIR_ENTRY");
+    
+    DBG("NextEntry in: cur_path=%s, cur_dir_len=%d, type=%s, cur_dir_file %sopen, openNext %sfound\n", cur_path, cur_dir_path_len, type==FILE_ENTRY?"FILE_ENTRY":"DIR_ENTRY", cur_dir_file?"":" not", f?"":"not ");
 
     while ( f ) {
         entry_name_len = 0;
@@ -45,7 +47,7 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
                 *entry_pos = file_name_pos;
             }
             f.close();
-            P("NextEntry out: cur_path=%s - pos(%d), index(%d), name_len = %d, len=%d/%d\n", 
+            DBG("NextEntry out: cur_path=%s - pos(%d), index(%d), name_len = %d, len=%d/%d\n", 
                               cur_path, entry_info->pos, entry_info->index, entry_name_len, cur_dir_path_len, cur_path_len);
             if ( type == FILE_ENTRY && file_filter != nullptr ) {
                 if ( file_filter( cur_path + file_name_pos, entry_name_len) )
@@ -79,7 +81,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
                 continue;
             dir_stack->push(dinf_dir);
             cur_dir_path_len = cur_path_len;
-            P("Down path-< %s cur_path_len=%d (push info: %d/%d)\n", cur_path, cur_path_len, dinf_dir.pos, dinf_dir.index);
+            DBG("Down path-< %s cur_path_len=%d (push info: %d/%d)\n", cur_path, cur_path_len, dinf_dir.pos, dinf_dir.index);
             dinf_file.init();
             dinf_dir.init();
             cur_dir_file.close();
@@ -110,7 +112,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
             cur_dir_path_len = dinf_dir.pos;
             cur_dir_path_len -= cur_dir_offset();
             cur_path[cur_dir_path_len] = 0;
-            P("Up path-> %s cur_dir_len=%d\n", cur_path, cur_dir_path_len);
+            DBG("Up path-> %s cur_dir_len=%d\n", cur_path, cur_dir_path_len);
             cur_dir_file.close();
             if ( cur_dir_file.open(cur_path, O_RDONLY) ) {
                 file_mode = false;
@@ -128,7 +130,7 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
     File tmp_file;
     dir_info_t dinf;
 
-    P("Config in: path=%s root=%s\n", path, root_path ? root_path : "<>");
+    DBG("Config in: path=%s root=%s\n", path, root_path ? root_path : "<>");
     init(max_dir_depth);
     if ( !is_dir_sep(*path) )
         return false; 
@@ -149,14 +151,14 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
             // root_path is not part of path, replace cur_path with root_path
             strncpy(cur_path, root_path, root_path_len);
             cur_path[cur_path_len = root_path_len] = 0;
-            P("cur_path=%s len=%d (replaced with root_path)\n", cur_path, cur_path_len);
+            DBG("cur_path=%s len=%d (replaced with root_path)\n", cur_path, cur_path_len);
         }
     }
     else
         root_path_len = 1;  // set root_path to "/"           
     // open file/dir to check path
     if ( !tmp_file.open(cur_path, O_RDONLY) ) {
-        P("cur_path=%s not found!\n", cur_path);
+        DBG("cur_path=%s not found!\n", cur_path);
         return false;
     }
     if ( tmp_file.isFile() ) {
@@ -167,7 +169,7 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
             if ( p == cur_path ) *(p+1) = 0; else *p = 0;
             cur_path_len = p - cur_path;
         }
-        P("last_file=%s, index=%d\n", p+1, dinf_file.index);
+        DBG("last_file=%s, index=%d\n", p+1, dinf_file.index);
     }
     // pos at first char after root_path, save details (dir_info_t) of all directories on the stack
     pos = root_path_len > 1 ? root_path_len+1 : root_path_len; // pos at first char after root_path
@@ -175,17 +177,17 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
         while ( cur_path[i] && cur_path[i] != '/' ) i++; 
         if ( pos == 1 ) {
             cur_dir_file.open("/", O_RDONLY);
-            P("* cur_dir=/\n");
+            DBG("* cur_dir=/\n");
         }
         else {
             cur_path[pos-1] = 0; 
-            P("* cur_dir=%s\n", cur_path);
+            DBG("* cur_dir=%s\n", cur_path);
             cur_dir_file.open(cur_path, O_RDONLY);
             cur_path[pos-1] = '/';
         }
         if ( cur_dir_file ) {
             cur_path[i] = 0;
-            P("* open %s\n", cur_path+pos);
+            DBG("* open %s\n", cur_path+pos);
             tmp_file.open(&cur_dir_file, cur_path + pos, O_RDONLY);
             if ( i != cur_path_len )
                 cur_path[i] = '/';
@@ -197,14 +199,14 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
                 dinf = { pos, (uint16_t)-1 };
             cur_dir_file.close();
             dir_stack->push(dinf);
-            P("* stack %d: ", dir_stack->status()); 
+            DBG("* stack %d: ", dir_stack->status()); 
         }
         else {
-            P("* cur_dir open failed\n");
+            DBG("* cur_dir open failed\n");
             return false;
         }
     }
-    P("Config out: cur_path=%s| rpl=%d, cpl=%d\n-------------------\n", cur_path, root_path_len, cur_path_len);
+    DBG("Config out: cur_path=%s| rpl=%d, cpl=%d\n-------------------\n", cur_path, root_path_len, cur_path_len);
     cur_dir_path_len = cur_path_len;
     return cur_dir_file.open(cur_path, O_RDONLY);    
 }
@@ -215,7 +217,7 @@ void DirPlay::init(int size) {
     else
         dir_stack->clear();
     card_error = false;
-    dir_stack->clear();
+    //dir_stack->clear();
     dinf_dir.init();
     dinf_file.init();
     cur_dir_file.close();
@@ -229,5 +231,18 @@ void DirPlay::init(int size) {
 
 bool DirPlay::Reset() {
     init(-1);
+    if ( cur_dir_file.open(cur_path, O_RDONLY) ) {
+        cur_dir_file.rewind();
+        return true;
+    }
+    return false;
+}
+
+bool DirPlay::Restart() {
+    card_error = false;
+    file_count = 0;
+    //if ( cur_dir_file ) 
+        cur_dir_file.close();
+    cur_path[cur_dir_path_len] = 0;
     return cur_dir_file.open(cur_path, O_RDONLY);
 }

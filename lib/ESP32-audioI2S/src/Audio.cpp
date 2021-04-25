@@ -1833,7 +1833,9 @@ void Audio::processLocalFile() {
     uint32_t bytesCanBeWritten = 0;
     uint32_t bytesCanBeRead = 0;
     int32_t bytesAddedToBuffer = 0;
-
+#ifdef SDFATFS_USED
+    uint8_t fileError = 0;      // used for SdFat
+#endif
     if(m_f_firstCall) {  // runs only ont time per connection, prepare for start
         m_f_firstCall = false;
         return;
@@ -1858,7 +1860,12 @@ void Audio::processLocalFile() {
 //    if(psramFound() && bytesAddedToBuffer >4096)
 //        vTaskDelay(2);// PSRAM has a bottleneck in the queue, so wait a little bit
 
-    if(bytesAddedToBuffer == -1) bytesAddedToBuffer = 0; // read error? eof?
+    if(bytesAddedToBuffer == -1) {
+        bytesAddedToBuffer = 0; // read error? eof?
+        #ifdef SDFATFS_USED 
+        fileError = audiofile.getError(); 
+        #endif  
+    }    
     bytesCanBeRead = InBuff.bufferFilled();
     if(bytesCanBeRead > InBuff.getMaxBlockSize()) bytesCanBeRead = InBuff.getMaxBlockSize();
     if(bytesCanBeRead == InBuff.getMaxBlockSize()) { // mp3 or aac frame complete?
@@ -1948,6 +1955,14 @@ void Audio::processLocalFile() {
         if(m_codec == CODEC_AAC)   AACDecoder_FreeBuffers();
         if(m_codec == CODEC_M4A)   AACDecoder_FreeBuffers();
         if(m_codec == CODEC_FLAC) FLACDecoder_FreeBuffers();
+
+        #ifdef SDFATFS_USED
+        if (fileError) {
+            sprintf(chbuf, "\"%s\" (Read error 0x%02x)", m_audioName, fileError);
+            if(audio_error_mp3) audio_error_mp3(chbuf);
+            return;
+        }
+        #endif
         sprintf(chbuf, "End of file \"%s\"", m_audioName);
         if(audio_info) audio_info(chbuf);
         if(audio_eof_mp3) audio_eof_mp3(m_audioName);
