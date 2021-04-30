@@ -25,28 +25,33 @@
 #define NEXT_BTN    4  
 
 Audio audio;
-DirPlay dplay;  // default without Config(): "/", dir_depth = 0
+DirPlay dplay;          // default without Config(): "/", dir_depth = 0
 Preferences prefs;
 ESP32Encoder encoder;
 InputButton enc_button(NEXT_BTN, true, ACTIVE_LOW);
 
+const int maxDirDepth = 10;
 const char *pCurrentSong;
 int8_t old_enc_val = -2, enc_val;   // -2 garantiert, dass setVolume am Anfang aufgerufen wird
 
+bool readError = false;
+unsigned last_time = 0;
+bool tick = false;
+const unsigned int errorCheckInterval = 2000;
+
+// for directory listing over Serial (optional)
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels);
 const char *name(File& f);
-bool readError = false;
-
 
 //###############################################################
 
+// file filter for PlayNextFile() (set with Dirplay::SetFileFilter(...))
 bool isMusicFile(const char *filename, int len) {
     const char *p;
     if ( !len ) len = strlen(filename);
     while ( len )
         if ( filename[--len] == '.' ) break;
     p = filename + len;
-    //Serial.printf("%s ", p);
     return  (  strcasecmp(p, ".mp3") == 0 
             || strcasecmp(p, ".m4a") == 0 
             );
@@ -67,8 +72,10 @@ bool PlayNextFile(const char** p, bool next_dir = false) {
     }
 }
 
+//###############################################################
+
 void setup() {
-    char filepath [256];
+    char last_filepath [256];
     const char rootpath[] = "/";
 
     Serial.begin(115200);
@@ -76,33 +83,29 @@ void setup() {
     while (!Serial) {
         SysCall::yield();
     }
-    //delay(1000);
     Serial.println();
 
     if ( !SD.begin() ) {
-        //Serial.println("Card Mount Failed");
         SD.initErrorHalt(); // SdFat-lib helper function
     }
     
     // listDir(SD, "/", 10); 
+    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);    
+      
     ESP32Encoder::useInternalWeakPullResistors = DOWN;
     encoder.attachSingleEdge(ENC_A, ENC_B);
-
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    //audio.setVolume(1); // 0...21
-   
-    prefs.begin("lastFile", false); 
     
+    prefs.begin("lastFile", false);    
     enc_val = prefs.getInt("volume", 1);
     encoder.setCount(enc_val ? enc_val : 1);
-    encoder.setFilter(1023);    
+    encoder.setFilter(1023); // debouncing filter (0...1023)    
     
-    if ( !prefs.getString("filepath", filepath, sizeof(filepath)) )
-        strcpy(filepath, rootpath);
+    if ( !prefs.getString("filepath", last_filepath, sizeof(last_filepath)) )
+        strcpy(last_filepath, rootpath);
 
-    if ( !dplay.Config(filepath, rootpath, 5) ) {   // dirdepth = 1, all files from rootpath plus one subdir will be selected
-        Serial.printf("Config failed! Ceck the path '%s' / root_path '%s'\nUsing rootpath instead of path!\n", filepath, rootpath);
-        if ( !dplay.Config(rootpath, rootpath, 5) ) { 
+    if ( !dplay.Config(last_filepath, rootpath, maxDirDepth) ) {   // dirdepth = 1, all files from rootpath plus one subdir will be selected
+        Serial.printf("Config failed! Ceck the path '%s' / root_path '%s'\nUsing rootpath instead of path!\n", last_filepath, rootpath);
+        if ( !dplay.Config(rootpath, rootpath, maxDirDepth) ) { 
             Serial.printf("Config failed! Ceck the rootpath!\n");
             SysCall::halt();    // SysCall from SdFat-Lib
         }
@@ -114,9 +117,6 @@ void setup() {
     PlayNextFile(&pCurrentSong);
 }
 
-unsigned last_time = 0;
-bool tick = false;
-const unsigned int interval = 2000;
 
 void loop()
 {
@@ -125,18 +125,18 @@ void loop()
         tick = false;
         last_time = millis();    
     }
-    else tick = ( millis() > (last_time + interval) );
+    else tick = ( millis() > (last_time + errorCheckInterval) );
 
     if ( (enc_val = (int8_t)(encoder.getCount())) != old_enc_val )
     {
         // Check volume level and adjust if necassary
-        Serial.printf("enc_val = %d  ---  ", enc_val);
+        // Serial.printf("enc_val = %d  ---  ", enc_val);
         if ( enc_val < 0 ) 
             enc_val = 0;
         else
             if ( enc_val > 21 )
                 enc_val = 21;
-        Serial.printf("Volume = %d\n", enc_val);
+        Serial.printf(">>> Volume = %d\n", enc_val);
         old_enc_val = enc_val;
         encoder.setCount(enc_val);
         audio.setVolume(enc_val);
@@ -150,15 +150,23 @@ void loop()
         prefs.putString("filepath", pCurrentSong);
         if ( r == "d" ) {
             nextDir = true;
-            Serial.println(">>>>>> Next directory");
+            Serial.println(">>> Next directory");
         }
         if ( r == "r" ) {
             if ( SD.begin() )
                 if ( !dplay.Reset() )
                     Serial.println("Fehler Reset!");
-            Serial.println(">>>>>> Reset playlist to root_path");
+            Serial.println(">>> Reset playlist to root_path");
             //nextDir = true;
         }
+        PlayNextFile(&pCurrentSong, nextDir);
+    }
+    
+    if ( enc_button.longPress() && audio.isRunning() ) 
+    {
+        nextDir = true;
+        audio.stopSong();
+        prefs.putString("filepath", pCurrentSong);
         PlayNextFile(&pCurrentSong, nextDir);
     }
     if ( enc_button.shortPress() && audio.isRunning() ) 
@@ -167,16 +175,19 @@ void loop()
         prefs.putString("filepath", pCurrentSong);
         PlayNextFile(&pCurrentSong, nextDir);
     }
-    if ( tick && (readError || SD.card()->errorCode() || dplay.IsCardError()) ) {
+    if ( tick && (readError || SD.card()->errorCode() || dplay.GetError()) ) {
         last_time = millis();
-        Serial.println("**** readError");   
+        Serial.print('.');   
         if ( SD.begin() ) {
             dplay.Restart();
+            readError = false;   
             PlayNextFile(&pCurrentSong);
-            readError = false; 
+
         }
     }
 }
+
+//###############################################################
 
 //optional
 void audio_info(const char *info) {
