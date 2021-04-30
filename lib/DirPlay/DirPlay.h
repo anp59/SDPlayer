@@ -88,7 +88,7 @@ public:
     bool Restart();
     void SetLoopMode(bool mode) { loop_play = mode; }
     void SetFileFilter(filter_func f = nullptr) { file_filter = f; }
-    bool IsCardError() { return card_error; }
+    uint8_t GetError() { return read_error; }
     unsigned int GetPlayedFiles() { return file_count; }
 private:
     typedef struct dir_info {
@@ -101,13 +101,14 @@ private:
     } dir_info_t;
     
     bool loop_play = false;
-    bool card_error = false;
+
     char cur_path[256];
     int root_path_len = 0; // must be 0 for correct initialization
     int cur_path_len;
     int cur_dir_path_len;
     unsigned int file_count;
     File cur_dir_file;
+    uint8_t read_error = 0;
 
     void init(int size);
     void init_dir_stack(unsigned int size);

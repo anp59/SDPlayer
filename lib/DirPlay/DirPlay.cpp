@@ -1,5 +1,6 @@
 #include "DirPlay.h"
 
+// helper macro for debug purposes
 const bool ENABLE_DEBUG_LOG = true;
 #define DBG(...) do if (ENABLE_DEBUG_LOG) printf("D# " __VA_ARGS__); while (0)
 
@@ -16,7 +17,7 @@ void DirPlay::init_dir_stack(unsigned int size) {
     dir_stack = new Stack<dir_info_t>(size); 
 }
 
-
+// returns len of filename, 0 if no next file or error
 size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry_pos) {
     size_t entry_name_len;
     int file_name_pos;
@@ -60,14 +61,16 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
             f.close(); 
         f.openNext(&cur_dir_file, O_RDONLY);
     }
+    read_error = cur_dir_file.getError();
     return 0;
 }
 
+// returns pos of filename in *file_path_ptr, 0 if not exist or error
 int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
     bool file_mode = !next_dir;
     *file_path_ptr = "";
     int entry_name_pos;
-    while ( !card_error) {
+    while ( !read_error) {
         if ( file_mode ) {
             if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
                 *file_path_ptr = cur_path;
@@ -93,7 +96,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
                 }
             }
             else {
-                card_error = true;
+                read_error = cur_dir_file.getError();
                 break;
             }
         }
@@ -118,7 +121,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
                 file_mode = false;
                 continue;
             }
-            card_error = true;
+            read_error = cur_dir_file.getError();
         }
     } 
     return 0;
@@ -216,7 +219,7 @@ void DirPlay::init(int size) {
         init_dir_stack(size);
     else
         dir_stack->clear();
-    card_error = false;
+    read_error = 0;
     //dir_stack->clear();
     dinf_dir.init();
     dinf_file.init();
@@ -239,10 +242,9 @@ bool DirPlay::Reset() {
 }
 
 bool DirPlay::Restart() {
-    card_error = false;
+    read_error = 0;
     file_count = 0;
-    //if ( cur_dir_file ) 
-        cur_dir_file.close();
+    cur_dir_file.close();
     cur_path[cur_dir_path_len] = 0;
     return cur_dir_file.open(cur_path, O_RDONLY);
 }
