@@ -1,7 +1,7 @@
 #include "DirPlay.h"
 
 // helper macro for debug purposes
-const bool ENABLE_DEBUG_LOG = true;
+const bool ENABLE_DEBUG_LOG = false;
 #define DBG(...) do if (ENABLE_DEBUG_LOG) printf("D# " __VA_ARGS__); while (0)
 
 

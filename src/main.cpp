@@ -6,7 +6,6 @@
 #include "InputButton.h"
 #include "ESP32Encoder.h"
 
-
 // Digital I/O used
 #ifndef SS
     #define SS      5
@@ -30,14 +29,20 @@ Preferences prefs;
 ESP32Encoder encoder;
 InputButton enc_button(NEXT_BTN, true, ACTIVE_LOW);
 
-const int maxDirDepth = 10;
-const char *pCurrentSong;
-int8_t old_enc_val = -2, enc_val;   // -2 garantiert, dass setVolume am Anfang aufgerufen wird
+int8_t old_enc_val = -2, enc_val;   // -2 guarantees that setVolume is called at the beginning
 
+const char *prefs_key_volume = "volume";
+const char *prefs_key_path   = "filepath";
+
+const int maxDirDepth = 10;
+const char *ptrCurrentFile;
+bool playNextFile = false;
 bool readError = false;
+
+const unsigned int errorCheckInterval = 2000;
 unsigned last_time = 0;
 bool tick = false;
-const unsigned int errorCheckInterval = 2000;
+
 
 // for directory listing over Serial (optional)
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels);
@@ -57,30 +62,29 @@ bool isMusicFile(const char *filename, int len) {
             );
 }
 
-bool PlayNextFile(const char** p, bool next_dir = false) {
+size_t PlayNextFile(const char** p, bool next_dir = false) {
+    size_t file_name_pos;
     while ( true ) {
-        if ( dplay.NextFile(p, next_dir) ) {
-            Serial.printf(">>> play %s\n", *p);
+        if ( (file_name_pos = dplay.NextFile(p, next_dir)) ) {
+            Serial.printf(">>> Play %s%s\n", next_dir ? "next dir " : "", *p);
             if ( !audio.connecttoFS(SD, *p) )
                 continue; 
-            return true;
         }
         else {
-            Serial.println(">>>>>> End of playlist, no loop-mode or no file found!");
-            return false;  
+            Serial.println(">>> End of playlist, no loop-mode or no file found!");  
         }
-    }
+        return file_name_pos; 
+    }   
 }
 
 //###############################################################
 
 void setup() {
     char last_filepath [256];
-    const char rootpath[] = "/";
+    const char rootpath[] = "/";    // All music files are played from this directory.
 
     Serial.begin(115200);
-    // Wait for USB Serial
-    while (!Serial) {
+    while (!Serial) {       // Wait for USB Serial
         SysCall::yield();
     }
     Serial.println();
@@ -96,11 +100,11 @@ void setup() {
     encoder.attachSingleEdge(ENC_A, ENC_B);
     
     prefs.begin("lastFile", false);    
-    enc_val = prefs.getInt("volume", 1);
+    enc_val = prefs.getInt(prefs_key_volume, 1);
     encoder.setCount(enc_val ? enc_val : 1);
     encoder.setFilter(1023); // debouncing filter (0...1023)    
     
-    if ( !prefs.getString("filepath", last_filepath, sizeof(last_filepath)) )
+    if ( !prefs.getString(prefs_key_path, last_filepath, sizeof(last_filepath)) )
         strcpy(last_filepath, rootpath);
 
     if ( !dplay.Config(last_filepath, rootpath, maxDirDepth) ) {   // dirdepth = 1, all files from rootpath plus one subdir will be selected
@@ -111,16 +115,19 @@ void setup() {
         }
     } 
     
-    dplay.SetFileFilter(isMusicFile);
-    dplay.SetLoopMode(true);    
+    dplay.SetFileFilter(isMusicFile);   // select only music files
+    dplay.SetLoopMode(true); 
 
-    PlayNextFile(&pCurrentSong);
+    PlayNextFile(&ptrCurrentFile);
 }
 
+//###############################################################
 
 void loop()
 {
     bool nextDir = false;
+    bool saveCurrentFile = true;
+
     if ( tick ) {
         tick = false;
         last_time = millis();    
@@ -130,7 +137,6 @@ void loop()
     if ( (enc_val = (int8_t)(encoder.getCount())) != old_enc_val )
     {
         // Check volume level and adjust if necassary
-        // Serial.printf("enc_val = %d  ---  ", enc_val);
         if ( enc_val < 0 ) 
             enc_val = 0;
         else
@@ -140,14 +146,13 @@ void loop()
         old_enc_val = enc_val;
         encoder.setCount(enc_val);
         audio.setVolume(enc_val);
-        prefs.putInt("volume", enc_val);
+        prefs.putInt(prefs_key_volume, enc_val);
     } 
     
     audio.loop();
-    if ( Serial.available() ) { // enter for next file, r to restart
+    
+    if ( Serial.available() ) { 
         String r = Serial.readString(); r.trim();   
-        audio.stopSong();
-        prefs.putString("filepath", pCurrentSong);
         if ( r == "d" ) {
             nextDir = true;
             Serial.println(">>> Next directory");
@@ -155,65 +160,72 @@ void loop()
         if ( r == "r" ) {
             if ( SD.begin() )
                 if ( !dplay.Reset() )
-                    Serial.println("Fehler Reset!");
+                    Serial.println("Error Reset!");
             Serial.println(">>> Reset playlist to root_path");
-            //nextDir = true;
         }
-        PlayNextFile(&pCurrentSong, nextDir);
+        playNextFile = true;
     }
     
     if ( enc_button.longPress() && audio.isRunning() ) 
     {
         nextDir = true;
-        audio.stopSong();
-        prefs.putString("filepath", pCurrentSong);
-        PlayNextFile(&pCurrentSong, nextDir);
+        playNextFile = true;
     }
     if ( enc_button.shortPress() && audio.isRunning() ) 
     {
-        audio.stopSong();
-        prefs.putString("filepath", pCurrentSong);
-        PlayNextFile(&pCurrentSong, nextDir);
+        playNextFile = true;
     }
     if ( tick && (readError || SD.card()->errorCode() || dplay.GetError()) ) {
         last_time = millis();
         Serial.print('.');   
         if ( SD.begin() ) {
-            dplay.Restart();
-            readError = false;   
-            PlayNextFile(&pCurrentSong);
-
+            if ( dplay.Restart() ) {
+                Serial.println();                 
+                readError = false;   
+                saveCurrentFile = false;
+                playNextFile = true;
+            }
         }
+    }
+    
+    if ( playNextFile ) {
+        int file_name_pos;
+        audio.stopSong();
+        if ( saveCurrentFile && !nextDir ) 
+            prefs.putString(prefs_key_path, ptrCurrentFile);
+        file_name_pos = PlayNextFile(&ptrCurrentFile, nextDir);
+        if ( nextDir ) {
+            char buf[256];
+            strcpy(buf, ptrCurrentFile);
+            buf[file_name_pos] = 0; // save directory only
+            prefs.putString(prefs_key_path, buf);
+        }
+        playNextFile = false;
     }
 }
 
 //###############################################################
-
 //optional
-void audio_info(const char *info) {
-    Serial.print("info        "); Serial.println(info);
-}
-void audio_id3data(const char *info) {  //id3 metadata
-    Serial.print("id3data     "); Serial.println(info);
-}
+
 void audio_eof_mp3(const char *info) {  //end of file
     Serial.print("eof_mp3     "); Serial.println(info);
-    prefs.putString("filepath", pCurrentSong);
-    PlayNextFile(&pCurrentSong);
+    playNextFile = true;
 }
 void audio_error_mp3(const char *info) {
     Serial.print("error_mp3   "); Serial.println(info);
     readError = true;
 }
-// void audio_showstreamtitle(const char *info) {
-//     Serial.print("streamtitle ");Serial.println(info);
-// }
-// void audio_bitrate(const char *info) {
-//     Serial.print("bitrate     ");Serial.println(info);
+
+// void audio_info(const char *info) {
+//     Serial.print("info        "); Serial.println(info);
 // }
 
+// void audio_id3data(const char *info) {  //id3 metadata
+//     Serial.print("id3data     "); Serial.println(info);
+// }
 
-//####################################################################################
+//###############################################################
+// optional functions for listing directory
 
 const char *name(File& f)
 {
