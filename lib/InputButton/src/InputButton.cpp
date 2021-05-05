@@ -61,7 +61,7 @@ mask_t DebounceButtons::getKeyCommon( mask_t key_mask )
 	
 void IRAM_ATTR DebounceButtons::onTimer()
 {
-	static mask_t ct0, ct1;		// ct0 und ct1 mit FF initialisieren 
+	static mask_t ct0 = ~0, ct1 = ~0;		// ct0 und ct1 mit 0xFFFFFFFF initialisieren 
 	static uint16_t rpt;
 	mask_t i;
 	portENTER_CRITICAL_ISR(&DebounceButtons::timerMux);

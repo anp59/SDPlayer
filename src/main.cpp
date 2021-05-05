@@ -57,6 +57,7 @@ bool isMusicFile(const char *filename, int len) {
     while ( len )
         if ( filename[--len] == '.' ) break;
     p = filename + len;
+    Serial.printf("isMusicFile: %s\n", p);
     return  (  strcasecmp(p, ".mp3") == 0 
             || strcasecmp(p, ".m4a") == 0 
             );
@@ -117,7 +118,7 @@ void setup() {
     
     dplay.SetFileFilter(isMusicFile);   // select only music files
     dplay.SetLoopMode(true); 
-
+    Serial.println(last_filepath);
     PlayNextFile(&ptrCurrentFile);
 }
 

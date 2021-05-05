@@ -1,7 +1,7 @@
 #include "DirPlay.h"
 
 // helper macro for debug purposes
-const bool ENABLE_DEBUG_LOG = false;
+const bool ENABLE_DEBUG_LOG = true;
 #define DBG(...) do if (ENABLE_DEBUG_LOG) printf("D# " __VA_ARGS__); while (0)
 
 
@@ -55,7 +55,7 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
                     return entry_name_len;
             }
             else
-                return entry_name_len;
+                return entry_name_len;  // no file_filter or DIR_ENTRY
         }
         else
             f.close(); 
@@ -71,6 +71,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
     *file_path_ptr = "";
     int entry_name_pos;
     while ( !read_error) {
+        DBG("NextFile: file_mode=%d\n", (int)file_mode);
         if ( file_mode ) {
             if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
                 *file_path_ptr = cur_path;
@@ -100,6 +101,7 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
                 break;
             }
         }
+        DBG("NextFile: file_count=%d, entry_name_pos=%d\n", file_count, entry_name_pos);
         if ( dir_stack->empty() ) {
             if ( loop_play && file_count ) {
                 dinf_dir.init();
@@ -202,7 +204,7 @@ bool DirPlay::Config(const char *path, const char *root_path, int max_dir_depth)
                 dinf = { pos, (uint16_t)-1 };
             cur_dir_file.close();
             dir_stack->push(dinf);
-            DBG("* stack %d: ", dir_stack->status()); 
+            DBG("* pushed on stack %d pos:%d / index%d\n", dir_stack->status(), dinf.pos, dinf.index); 
         }
         else {
             DBG("* cur_dir open failed\n");
