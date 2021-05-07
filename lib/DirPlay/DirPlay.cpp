@@ -1,7 +1,7 @@
 #include "DirPlay.h"
 
 // helper macro for debug purposes
-const bool ENABLE_DEBUG_LOG = true;
+const bool ENABLE_DEBUG_LOG = false;
 #define DBG(...) do if (ENABLE_DEBUG_LOG) printf("D# " __VA_ARGS__); while (0)
 
 
@@ -51,8 +51,10 @@ size_t DirPlay::next_entry(entry_type_t type, dir_info_t *entry_info, int *entry
             DBG("NextEntry out: cur_path=%s - pos(%d), index(%d), name_len = %d, len=%d/%d\n", 
                               cur_path, entry_info->pos, entry_info->index, entry_name_len, cur_dir_path_len, cur_path_len);
             if ( type == FILE_ENTRY && file_filter != nullptr ) {
-                if ( file_filter( cur_path + file_name_pos, entry_name_len) )
+                if ( file_filter( cur_path + file_name_pos, entry_name_len) ) {
+                    file_count++; 
                     return entry_name_len;
+                }
             }
             else
                 return entry_name_len;  // no file_filter or DIR_ENTRY
@@ -75,7 +77,6 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
         if ( file_mode ) {
             if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
                 *file_path_ptr = cur_path;
-                file_count++;
                 return entry_name_pos;
             }
             file_mode = false;
@@ -92,7 +93,6 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
             if ( cur_dir_file.open(cur_path, O_RDONLY) ) {
                 if ( next_entry(FILE_ENTRY, &dinf_file, &entry_name_pos) ) {
                     *file_path_ptr = cur_path;
-                    file_count++;
                     return entry_name_pos; 
                 }
             }
@@ -101,12 +101,13 @@ int DirPlay::NextFile(const char **file_path_ptr, bool next_dir) {
                 break;
             }
         }
-        DBG("NextFile: file_count=%d, entry_name_pos=%d\n", file_count, entry_name_pos);
+        DBG("NextFile: file_count=%d, loop_count=%d, entry_name_pos=%d\n", file_count, loop_count, entry_name_pos);
         if ( dir_stack->empty() ) {
-            if ( loop_play && file_count ) {
+            if ( loop_play && (file_count || !loop_count) ) {
                 dinf_dir.init();
                 dinf_file.init();
                 file_mode = true;
+                loop_count++;
                 continue;  
             }            
             cur_dir_file.close();
@@ -226,7 +227,7 @@ void DirPlay::init(int size) {
     dinf_dir.init();
     dinf_file.init();
     cur_dir_file.close();
-    file_count = 0;
+    file_count = loop_count = 0;
     if ( root_path_len == 0 ) {
         cur_path[0] = '/';
         root_path_len = 1;
@@ -245,7 +246,7 @@ bool DirPlay::Reset() {
 
 bool DirPlay::Restart() {
     read_error = 0;
-    file_count = 0;
+    file_count = loop_count = 0;
     cur_dir_file.close();
     cur_path[cur_dir_path_len] = 0;
     return cur_dir_file.open(cur_path, O_RDONLY);

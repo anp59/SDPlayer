@@ -103,10 +103,11 @@ private:
     bool loop_play = false;
 
     char cur_path[256];
-    int root_path_len = 0; // must be 0 for correct initialization
+    int root_path_len = 0;      // must be 0 for correct initialization
     int cur_path_len;
     int cur_dir_path_len;
-    unsigned int file_count;
+    unsigned int file_count;    // number of all files selected in next_entry() with positive result of file_filter()
+    unsigned int loop_count;   
     File cur_dir_file;
     uint8_t read_error = 0;
 
