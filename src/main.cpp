@@ -6,6 +6,8 @@
 #include "InputButton.h"
 #include "ESP32Encoder.h"
 
+// Version 1.0  /   07.05.2021
+
 // Digital I/O used
 #ifndef SS
     #define SS      5
