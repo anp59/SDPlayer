@@ -2,8 +2,8 @@
  * Audio.h
  *
  *  Created on: Oct 26,2018
- *  Updated on: Apr 10,2021
- *      Author: Wolle (schreibfaul1)   ¯\_(ツ)_/¯
+ *  Updated on: May 04,2021
+ *      Author: Wolle (schreibfaul1)
  */
 
 #ifndef AUDIO_H_
@@ -36,6 +36,9 @@ extern __attribute__((weak)) void audio_lasthost(const char*);
 extern __attribute__((weak)) void audio_eof_speech(const char*);
 extern __attribute__((weak)) void audio_eof_stream(const char*); // The webstream comes to an end
 
+#ifdef SDFATFS_USED
+extern __attribute__((weak)) void audio_error_mp3(const char*); // readError (if SdFat is used) 
+#endif
 //----------------------------------------------------------------------------------------------------------------------
 
 class AudioBuffer {
@@ -83,19 +86,20 @@ public:
     void     resetBuffer();                     // restore defaults
 
 protected:
-    const size_t m_buffSizePSRAM = 300000; // most webstreams limit the advance to 100...300Kbytes
-    const size_t m_buffSizeRAM   = 1600 * 5;
-    size_t       m_buffSize      = 0;
-    size_t       m_freeSpace     = 0;
-    size_t       m_writeSpace    = 0;
-    size_t       m_dataLength    = 0;
-    size_t       m_resBuffSize   = 1600; // reserved buffspace, >= one mp3 frame
-    size_t       m_maxBlockSize  = 1600;
-    uint8_t*     m_buffer        = NULL;
-    uint8_t*     m_writePtr      = NULL;
-    uint8_t*     m_readPtr       = NULL;
-    uint8_t*     m_endPtr        = NULL;
-    bool         m_f_start       = true;
+    const size_t m_buffSizePSRAM    = 300000; // most webstreams limit the advance to 100...300Kbytes
+    const size_t m_buffSizeRAM      = 1600 * 5;
+    size_t       m_buffSize         = 0;
+    size_t       m_freeSpace        = 0;
+    size_t       m_writeSpace       = 0;
+    size_t       m_dataLength       = 0;
+    size_t       m_resBuffSizeRAM   = 1600;     // reserved buffspace, >= one mp3  frame
+    size_t       m_resBuffSizePSRAM = 4096 * 4; // reserved buffspace, >= one flac frame
+    size_t       m_maxBlockSize     = 1600;
+    uint8_t*     m_buffer           = NULL;
+    uint8_t*     m_writePtr         = NULL;
+    uint8_t*     m_readPtr          = NULL;
+    uint8_t*     m_endPtr           = NULL;
+    bool         m_f_start          = true;
 };
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -106,9 +110,10 @@ class Audio : private AudioBuffer{
 public:
     Audio(); // #99
     ~Audio();
-    bool connecttoFS(fs::FS &fs, const char* file);
-    bool connecttoSD(const char* sdfile);
+    bool connecttoFS(fs::FS &fs, const char* path);
+    bool connecttoSD(const char* path);
     bool setFileLoop(bool input);//TEST loop
+    void UTF8toASCII(char* str);
     bool connecttohost(const char* host, const char* user = "", const char* pwd = "");
     bool connecttospeech(const char* speech, const char* lang);
     void loop();
@@ -243,7 +248,8 @@ private:
 private:
     enum : int { APLL_AUTO = -1, APLL_ENABLE = 1, APLL_DISABLE = 0 };
     enum : int { EXTERNAL_I2S = 0, INTERNAL_DAC = 1, INTERNAL_PDM = 2 };
-    enum : int { CODEC_NONE, CODEC_WAV, CODEC_MP3, CODEC_AAC, CODEC_M4A, CODEC_APP, CODEC_FLAC, CODEC_OGG};
+    enum : int { CODEC_NONE, CODEC_WAV, CODEC_MP3, CODEC_AAC, CODEC_M4A, CODEC_FLAC, CODEC_OGG,
+                 CODEC_OGG_FLAC, CODEC_OGG_OPUS};
     enum : int { FORMAT_NONE = 0, FORMAT_M3U = 1, FORMAT_PLS = 2, FORMAT_ASX = 3};
     enum : int { AUDIO_NONE, AUDIO_HEADER , AUDIO_DATA, AUDIO_METADATA, AUDIO_PLAYLISTINIT,
                  AUDIO_PLAYLISTHEADER,  AUDIO_PLAYLISTDATA, AUDIO_SWM };
@@ -251,7 +257,7 @@ private:
                  FLAC_SEEK = 6, FLAC_VORBIS = 7, FLAC_CUESHEET = 8, FLAC_PICTURE = 9, FLAC_OKAY = 100};
     enum : int { M4A_BEGIN = 0, M4A_FTYP = 1, M4A_CHK = 2, M4A_MOOV = 3, M4A_FREE = 4, M4A_TRAK = 5, M4A_MDAT = 6,
                  M4A_ILST = 7, M4A_MP4A = 8, M4A_AMRDY = 99, M4A_OKAY = 100};
-    enum : int { OGG_BEGIN = 0, OGG_MAGIC = 1, OGG_OKAY = 100};
+    enum : int { OGG_BEGIN = 0, OGG_MAGIC = 1, OGG_HEADER = 2, OGG_FIRST = 3, OGG_AMRDY = 99, OGG_OKAY = 100};
     typedef enum { LEFTCHANNEL=0, RIGHTCHANNEL=1 } SampleIndex;
     typedef enum { LOWSHELF = 0, PEAKEQ = 1, HIFGSHELF =2 } FilterType;
 
@@ -278,10 +284,8 @@ private:
     const size_t    m_frameSizeFLAC = 4096 * 4;
 
     char            chbuf[256];
-    char            path[256];
     char            m_plsURL[256];                  // URL found in playlist
     char            m_lastHost[256];                // Store the last URL to a webstream
-    char            m_audioName[256];               // the name of the file
     filter_t        m_filter[3];                    // digital filters
     size_t          m_id3Size = 0;                  // length id3 tag
     size_t          m_wavHeaderSize = 0;
