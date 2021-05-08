@@ -2117,7 +2117,7 @@ void Audio::processLocalFile() {
 
         #ifdef SDFATFS_USED
         if (fileError) {
-            sprintf(chbuf, "\"%s\" (Read error 0x%02x)", m_audioName, fileError);
+            sprintf(chbuf, "\"%s\" (Read error 0x%02x)", afn.c_str(), fileError);
             if(audio_error_mp3) audio_error_mp3(chbuf);
             return;
         }
