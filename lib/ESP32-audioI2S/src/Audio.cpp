@@ -6,6 +6,9 @@
  *      Author: Wolle (schreibfaul1)
  *
  */
+/*
+ *  anp59: add several changes for use in SDPlayer
+ */ 
 
 #include "Audio.h"
 #include "mp3_decoder/mp3_decoder.h"
@@ -1991,6 +1994,7 @@ void Audio::processLocalFile() {
 #ifdef SDFATFS_USED
     uint8_t fileError = 0;      // used for SdFat
 #endif
+    if(m_f_firstCall) {  // runs only one time per connection, prepare for start
         m_f_firstCall = false;
         return;
     }
@@ -2118,6 +2122,9 @@ void Audio::processLocalFile() {
             return;
         }
         #endif
+        sprintf(chbuf, "End of file \"%s\"", afn.c_str());
+        if(audio_info) {vTaskDelay(2); audio_info(chbuf);}
+        if(audio_eof_mp3) audio_eof_mp3(afn.c_str());
     }
 }
 //---------------------------------------------------------------------------------------------------------------------
