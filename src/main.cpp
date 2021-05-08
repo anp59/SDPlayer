@@ -59,12 +59,15 @@ bool isMusicFile(const char *filename, int len) {
     while ( len )
         if ( filename[--len] == '.' ) break;
     p = filename + len;
-    Serial.printf("isMusicFile: %s\n", p);
+    // Serial.printf("isMusicFile: %s\n", p);
     return  (  strcasecmp(p, ".mp3") == 0 
             || strcasecmp(p, ".m4a") == 0 
+            || strcasecmp(p, ".aac") == 0
+            || strcasecmp(p, ".flac") == 0 
+            || strcasecmp(p, ".wav") == 0 
             );
 }
-
+          
 size_t PlayNextFile(const char** p, bool next_dir = false) {
     size_t file_name_pos;
     while ( true ) {
