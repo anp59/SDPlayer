@@ -21,11 +21,6 @@
 #elif (SD_IMPL == 3) 
     #include "SdFat.h"
 
-    class File33 : public File32 {
-        const char* name() { return "my Name"; }
-    };
-
-
     // set SDFAT_FILE_TYPE in SdFatConfig.h
     #if   SDFAT_FILE_TYPE == 1
         typedef File32 File;
