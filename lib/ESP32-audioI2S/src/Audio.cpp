@@ -2108,7 +2108,12 @@ void Audio::processLocalFile() {
         } //TEST loop
         m_f_stream = false;
         m_f_localfile = false;
+    #ifdef SDFATFS_USED
+        audiofile.getName(chbuf, sizeof(chbuf));
+        String afn = chbuf;
+    #else
         String afn = audiofile.name(); // store temporary the name
+    #endif
         stopSong();
         if(m_codec == CODEC_MP3)   MP3Decoder_FreeBuffers();
         if(m_codec == CODEC_AAC)   AACDecoder_FreeBuffers();
