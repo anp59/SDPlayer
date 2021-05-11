@@ -30,6 +30,7 @@
         typedef FsFile File;
     #endif
 
+    
     namespace fs {
         
         class FS : public SdFat {
