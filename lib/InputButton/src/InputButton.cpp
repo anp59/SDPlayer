@@ -1,7 +1,8 @@
 // 
 // Quelle: Peter Dannegger
-// 
-//#include <assert.h>
+// adapted for ESP32 by anp59
+//
+
 #if defined(ARDUINO_ARCH_ESP32)
 
 #include "InputButton.h"

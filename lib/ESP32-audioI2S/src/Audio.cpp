@@ -2108,12 +2108,14 @@ void Audio::processLocalFile() {
         } //TEST loop
         m_f_stream = false;
         m_f_localfile = false;
-    // #ifdef SDFATFS_USED
-    //     audiofile.getName(chbuf, sizeof(chbuf));
-    //     String afn = chbuf;
-    // #else
-        String afn = audiofile.name(); // store temporary the name
-    // #endif
+    
+        #ifdef SDFATFS_USED
+        audiofile.getName(chbuf, sizeof(chbuf));
+        char *afn =strdup(chbuf);
+        #else
+        char *afn =strdup(audiofile.name()); // store temporary the name
+        #endif
+    
         stopSong();
         if(m_codec == CODEC_MP3)   MP3Decoder_FreeBuffers();
         if(m_codec == CODEC_AAC)   AACDecoder_FreeBuffers();
@@ -2122,14 +2124,15 @@ void Audio::processLocalFile() {
 
         #ifdef SDFATFS_USED
         if (fileError) {
-            sprintf(chbuf, "\"%s\" (Read error 0x%02x)", afn.c_str(), fileError);
+            sprintf(chbuf, "\"%s\" (Read error 0x%02x)", afn, fileError);
             if(audio_error_mp3) audio_error_mp3(chbuf);
             return;
         }
         #endif
-        sprintf(chbuf, "End of file \"%s\"", afn.c_str());
+        sprintf(chbuf, "End of file \"%s\"", afn);
         if(audio_info) {vTaskDelay(2); audio_info(chbuf);}
-        if(audio_eof_mp3) audio_eof_mp3(afn.c_str());
+        if(audio_eof_mp3) audio_eof_mp3(afn);
+        if(afn) free(afn);
     }
 }
 //---------------------------------------------------------------------------------------------------------------------

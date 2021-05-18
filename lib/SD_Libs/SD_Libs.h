@@ -20,6 +20,7 @@
     #define SD SPIFFS
 #elif (SD_IMPL == 3) 
     #include "SdFat.h"
+   
 
     // set SDFAT_FILE_TYPE in SdFatConfig.h
     #if   SDFAT_FILE_TYPE == 1
@@ -30,12 +31,13 @@
         typedef FsFile File;
     #endif
 
-    
+
     namespace fs {
         
         class FS : public SdFat {
         public: 
             bool begin(SdCsPin_t csPin = SS, uint32_t maxSck = SD_SCK_MHZ(25)) { return SdFat::begin(csPin, maxSck); } 
+
         };
     
         class SDFATFS : public fs::FS {

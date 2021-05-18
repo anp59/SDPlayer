@@ -1,6 +1,7 @@
 // InputButton.h
 
 // Quelle: Peter Dannegger
+// adapted for ESP32 by anp59 (2018)
 
 #ifndef _INPUTBUTTON_h
 #define _INPUTBUTTON_h

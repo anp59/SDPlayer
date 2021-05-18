@@ -99,7 +99,8 @@ void setup() {
         SD.initErrorHalt(); // SdFat-lib helper function
     }
     
-    listDir(SD, "/", 10); 
+    //listDir(SD, "/", 10); 
+    
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);    
       
     ESP32Encoder::useInternalWeakPullResistors = DOWN;
