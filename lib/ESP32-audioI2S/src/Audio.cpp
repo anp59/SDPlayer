@@ -3409,7 +3409,7 @@ bool Audio::setTimeOffset(int sec){
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::setFilePos(uint32_t pos) {
     if(!audiofile) return false;
-    if(!m_avr_bitrate) return false;
+    //if(!m_avr_bitrate) return false;
     if(m_codec == CODEC_M4A) return false;
     m_f_playing = false;
     if(m_codec == CODEC_MP3) MP3Decoder_ClearBuffer();
@@ -3417,7 +3417,7 @@ bool Audio::setFilePos(uint32_t pos) {
     if(m_codec == CODEC_FLAC) FLACDecoderReset();
     InBuff.resetBuffer();
     if(pos < m_audioDataStart) pos = m_audioDataStart; // issue #96
-    m_audioCurrentTime = (pos-m_audioDataStart) * 8 / m_avr_bitrate; // #96
+    if(m_avr_bitrate) m_audioCurrentTime = (pos-m_audioDataStart) * 8 / m_avr_bitrate; // #96
     return audiofile.seek(pos);
 }
 //---------------------------------------------------------------------------------------------------------------------
