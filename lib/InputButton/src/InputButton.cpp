@@ -102,6 +102,7 @@ void DebounceButtons::begin()
 	timer = timerBegin(0, 80, true);		// Divider 80 --> ESP32 clock is 80 MHz --> HardwareTimer every 1us
 	timerAttachInterrupt(timer, &DebounceButtons::onTimer, true);
 	timerAlarmWrite(timer, 1000 * TIMER_INTERVAL, true);	// aller 1 ms
+	delay(0);
 	timerAlarmEnable(timer);
 }
 

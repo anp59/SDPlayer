@@ -23,13 +23,13 @@
 
 #define ENC_A       32
 #define ENC_B       33
-#define NEXT_BTN    4  
+#define NEXT_BTN    21  
 
 Audio audio;
 DirPlay dplay;          // default without Config(): "/", dir_depth = 0
 Preferences prefs;
-ESP32Encoder encoder;
 InputButton enc_button(NEXT_BTN, true, ACTIVE_LOW);
+ESP32Encoder encoder;
 
 int8_t old_enc_val = -2, enc_val;   // -2 guarantees that setVolume is called at the beginning
 
@@ -40,6 +40,7 @@ const int maxDirDepth = 10;
 const char *ptrCurrentFile;
 bool playNextFile = false;
 bool readError = false;
+bool filePlayed = false;
 
 const unsigned int errorCheckInterval = 2000;
 unsigned last_time = 0;
@@ -70,11 +71,13 @@ bool isMusicFile(const char *filename, int len) {
 
 size_t PlayNextFile(const char** p, bool next_dir = false) {
     size_t file_name_pos;
+    filePlayed = false;
     while ( true ) {
         if ( (file_name_pos = dplay.NextFile(p, next_dir)) ) {
-            Serial.printf(">>> Play %s%s\n", next_dir ? "next dir " : "", *p);
+            Serial.printf("\n>>> Play %s%s\n", next_dir ? "next dir " : "", *p);
             if ( !audio.connecttoFS(SD, *p) )
                 continue; 
+            filePlayed = true;
         }
         else {
             Serial.println(">>> End of playlist, no loop-mode or no file found!");  
@@ -89,19 +92,23 @@ void setup() {
     char last_filepath [256];
     const char rootpath[] = "/";    // All music files are played from this directory.
 
+
     Serial.begin(115200);
-    while (!Serial) {       // Wait for USB Serial
-        SysCall::yield();
-    }
+
+    // if (!Serial) {       // Wait for USB Serial
+    //     delay(100); 
+    // }
     Serial.println();
 
-    if ( !SD.begin() ) {
+    if ( !SD.begin(SS, SD_SCK_MHZ(25)) ) {
         SD.initErrorHalt(); // SdFat-lib helper function
     }
     
     //listDir(SD, "/", 10); 
     
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);    
+    audio.forceMono(true);
+    audio.setTone(6, 0, 0);
       
     ESP32Encoder::useInternalWeakPullResistors = DOWN;
     encoder.attachSingleEdge(ENC_A, ENC_B);
@@ -123,7 +130,7 @@ void setup() {
     } 
     
     dplay.SetFileFilter(isMusicFile);   // select only music files
-    dplay.SetLoopMode(true); 
+    dplay.SetLoopMode(false); 
     Serial.println(last_filepath);
     PlayNextFile(&ptrCurrentFile);
 }
@@ -157,7 +164,11 @@ void loop()
     } 
     
     audio.loop();
-    
+    if ( !audio.isRunning() && /*loopPlay &&*/ filePlayed ) {  // error in audio-loop (e.g. decode errors)
+        playNextFile = true;
+        //filePlayed = false;
+    }
+
     if ( Serial.available() ) { 
         String r = Serial.readString(); r.trim();   
         if ( r == "d" ) {
@@ -173,9 +184,14 @@ void loop()
         playNextFile = true;
     }
     
-    if ( enc_button.longPress() && audio.isRunning() ) 
+    if ( enc_button.longPress() ) 
     {
-        nextDir = true;
+        if ( audio.isRunning() ) 
+            nextDir = true;
+        else {
+            if ( !filePlayed && !dplay.GetLoopMode() )  
+                dplay.Reset();    
+        }
         playNextFile = true;
     }
     if ( enc_button.shortPress() && audio.isRunning() ) 
@@ -217,10 +233,12 @@ void loop()
 void audio_eof_mp3(const char *info) {  //end of file
     Serial.print("eof_mp3     "); Serial.println(info);
     playNextFile = true;
+    //filePlayed = false;
 }
 void audio_error_mp3(const char *info) {
     Serial.print("error_mp3   "); Serial.println(info);
     readError = true;
+    //filePlayed = false;
 }
 
 void audio_info(const char *info) {

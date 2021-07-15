@@ -87,6 +87,7 @@ public:
     bool Reset(); // reset to root_path
     bool Restart();
     void SetLoopMode(bool mode) { loop_play = mode; }
+    bool GetLoopMode() { return loop_play; }
     void SetFileFilter(filter_func f = nullptr) { file_filter = f; }
     uint8_t GetError() { return read_error; }
     unsigned int GetPlayedFiles() { return file_count; }
