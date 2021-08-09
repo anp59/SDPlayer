@@ -130,7 +130,7 @@ void setup() {
     } 
     
     dplay.SetFileFilter(isMusicFile);   // select only music files
-    dplay.SetLoopMode(false); 
+    dplay.SetLoopMode(true); 
     Serial.println(last_filepath);
     PlayNextFile(&ptrCurrentFile);
 }
@@ -164,9 +164,9 @@ void loop()
     } 
     
     audio.loop();
-    if ( !audio.isRunning() && /*loopPlay &&*/ filePlayed ) {  // error in audio-loop (e.g. decode errors)
+
+    if ( !audio.isRunning() && filePlayed ) {  // error in audio-loop (e.g. decode errors)
         playNextFile = true;
-        //filePlayed = false;
     }
 
     if ( Serial.available() ) { 
@@ -189,7 +189,7 @@ void loop()
         if ( audio.isRunning() ) 
             nextDir = true;
         else {
-            if ( !filePlayed && !dplay.GetLoopMode() )  
+            if ( !filePlayed && !dplay.GetLoopMode() )  // end of playlist reached
                 dplay.Reset();    
         }
         playNextFile = true;
@@ -233,12 +233,10 @@ void loop()
 void audio_eof_mp3(const char *info) {  //end of file
     Serial.print("eof_mp3     "); Serial.println(info);
     playNextFile = true;
-    //filePlayed = false;
 }
 void audio_error_mp3(const char *info) {
     Serial.print("error_mp3   "); Serial.println(info);
     readError = true;
-    //filePlayed = false;
 }
 
 void audio_info(const char *info) {
