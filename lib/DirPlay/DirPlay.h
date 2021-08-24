@@ -2,7 +2,8 @@
 #define __DIR_PLAY__
 
 #include "Arduino.h"
-#include "SD_Libs.h"
+#include "Audio.h"
+//#include "SD_Libs.h"
 
 // The idea was to design an SD player that could play all the music tracks on an SD in an endless loop.
 // Both the directory ranges and a file name filter can be specified (Config()). 

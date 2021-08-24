@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Preferences.h"
 #include "Audio.h"
-#include "SD_Libs.h"
+//#include "SD_Libs.h"
 #include "DirPlay.h"
 #include "InputButton.h"
 #include "ESP32Encoder.h"
@@ -21,9 +21,13 @@
 #define I2S_BCLK    27
 #define I2S_LRC     26
 
+#define MAX98357A_SD    22
+
 #define ENC_A       32
 #define ENC_B       33
 #define NEXT_BTN    21  
+
+#define MIN_VOLUME  4
 
 Audio audio;
 DirPlay dplay;          // default without Config(): "/", dir_depth = 0
@@ -77,6 +81,8 @@ size_t PlayNextFile(const char** p, bool next_dir = false) {
             Serial.printf("\n>>> Play %s%s\n", next_dir ? "next dir " : "", *p);
             if ( !audio.connecttoFS(SD, *p) )
                 continue; 
+            else
+                digitalWrite(MAX98357A_SD, HIGH); // MAX98357A SD-Mode left channel
             filePlayed = true;
         }
         else {
@@ -91,9 +97,10 @@ size_t PlayNextFile(const char** p, bool next_dir = false) {
 void setup() {
     char last_filepath [256];
     const char rootpath[] = "/";    // All music files are played from this directory.
+    pinMode(MAX98357A_SD, OUTPUT);
+    digitalWrite(MAX98357A_SD, LOW);    // mute
 
-
-    Serial.begin(115200);
+        Serial.begin(115200);
 
     // if (!Serial) {       // Wait for USB Serial
     //     delay(100); 
@@ -108,14 +115,14 @@ void setup() {
     
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);    
     audio.forceMono(true);
-    audio.setTone(6, 0, 0);
+    audio.setTone(6, 0, 2);
       
     ESP32Encoder::useInternalWeakPullResistors = DOWN;
     encoder.attachSingleEdge(ENC_A, ENC_B);
     
     prefs.begin("lastFile", false);    
-    enc_val = prefs.getInt(prefs_key_volume, 1);
-    encoder.setCount(enc_val ? enc_val : 1);
+    enc_val = prefs.getInt(prefs_key_volume, MIN_VOLUME);
+    encoder.setCount(enc_val < MIN_VOLUME ? MIN_VOLUME : enc_val);
     encoder.setFilter(1023); // debouncing filter (0...1023)    
     
     if ( !prefs.getString(prefs_key_path, last_filepath, sizeof(last_filepath)) )
@@ -130,7 +137,8 @@ void setup() {
     } 
     
     dplay.SetFileFilter(isMusicFile);   // select only music files
-    dplay.SetLoopMode(true); 
+    dplay.SetLoopMode(true);
+    digitalWrite(MAX98357A_SD, HIGH); // MAX98357A SD-Mode left channel
     Serial.println(last_filepath);
     PlayNextFile(&ptrCurrentFile);
 }
@@ -169,20 +177,20 @@ void loop()
         playNextFile = true;
     }
 
-    if ( Serial.available() ) { 
-        String r = Serial.readString(); r.trim();   
-        if ( r == "d" ) {
-            nextDir = true;
-            Serial.println(">>> Next directory");
-        }
-        if ( r == "r" ) {
-            if ( SD.begin() )
-                if ( !dplay.Reset() )
-                    Serial.println("Error Reset!");
-            Serial.println(">>> Reset playlist to root_path");
-        }
-        playNextFile = true;
-    }
+    // if ( Serial.available() ) { 
+    //     String r = Serial.readString(); r.trim();   
+    //     if ( r == "d" ) {
+    //         nextDir = true;
+    //         Serial.println(">>> Next directory");
+    //     }
+    //     if ( r == "r" ) {
+    //         if ( SD.begin() )
+    //             if ( !dplay.Reset() )
+    //                 Serial.println("Error Reset!");
+    //         Serial.println(">>> Reset playlist to root_path");
+    //     }
+    //     playNextFile = true;
+    // }
     
     if ( enc_button.longPress() ) 
     {
@@ -232,6 +240,7 @@ void loop()
 
 void audio_eof_mp3(const char *info) {  //end of file
     Serial.print("eof_mp3     "); Serial.println(info);
+    digitalWrite(MAX98357A_SD, LOW);
     playNextFile = true;
 }
 void audio_error_mp3(const char *info) {
@@ -239,9 +248,11 @@ void audio_error_mp3(const char *info) {
     readError = true;
 }
 
+/*
 void audio_info(const char *info) {
     Serial.print("info        "); Serial.println(info);
 }
+*/
 
 // void audio_id3data(const char *info) {  //id3 metadata
 //     Serial.print("id3data     "); Serial.println(info);

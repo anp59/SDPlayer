@@ -54,5 +54,5 @@ public:
 };
 
 //Added by Sloeber 
-#pragma once
+//#pragma once
 
