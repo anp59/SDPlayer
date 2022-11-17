@@ -14,8 +14,8 @@
 #endif
 #define SD_CS       5
 #define SPI_SCK     18
-#define SPI_MISO    19
-#define SPI_MOSI    23
+#define SPI_MISO    19  // SD-Card MISO
+#define SPI_MOSI    23  // SD-Card MOSI
 
 #define I2S_DOUT    25
 #define I2S_BCLK    27
@@ -111,11 +111,11 @@ void setup() {
         SD.initErrorHalt(); // SdFat-lib helper function
     }
     
-    //listDir(SD, "/", 10); 
+    // listDir(SD, "/", 10); 
     
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);    
     audio.forceMono(true);
-    audio.setTone(6, 0, 2);
+    audio.setTone(5, 0, 3);
       
     ESP32Encoder::useInternalWeakPullResistors = DOWN;
     encoder.attachSingleEdge(ENC_A, ENC_B);
@@ -136,6 +136,7 @@ void setup() {
         }
     } 
     
+    //audio.setVolume(1);
     dplay.SetFileFilter(isMusicFile);   // select only music files
     dplay.SetLoopMode(true);
     digitalWrite(MAX98357A_SD, HIGH); // MAX98357A SD-Mode left channel
@@ -313,6 +314,8 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
            #else   
             if ( file.isDirectory() && mode == 1 ) {
            #endif        
+                if ( file.isHidden() ) 
+                    Serial.print("*");                
                 Serial.print("DIR : ");
                 Serial.printf("%s (L%d - I%d)\n", name(file), levels, file.dirIndex());
                 if(levels){
@@ -331,7 +334,9 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
             if ( !file.isDir() && mode == 2 ) {
            #else   
             if ( !file.isDirectory() && mode == 2 ) {
-           #endif                 
+           #endif
+                if (file.isHidden())
+                    Serial.print("*");
                 Serial.print("  FILE: ");
                 Serial.printf("%s (L%d - I%d)\n", name(file), levels, file.dirIndex());
                 //Serial.print("  SIZE: ");
